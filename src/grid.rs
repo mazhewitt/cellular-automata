@@ -33,14 +33,11 @@ pub fn step(src: &[u8], dst: &mut [u8]) {
             let neighbors = count_alive_neighbors(src, x, y);
 
             dst[idx] = if cell == ALIVE {
-                // Alive cell: survive with 2 or 3, otherwise begin dying
-                if neighbors == 2 || neighbors == 3 { ALIVE } else { 254 }
+                if neighbors == 2 || neighbors == 3 { ALIVE } else { 192 }
             } else if cell == 0 {
-                // Dead cell: birth with exactly 3
                 if neighbors == 3 { ALIVE } else { 0 }
             } else {
-                // Dying cell (1–254): rebirth with 3, otherwise fade
-                if neighbors == 3 { ALIVE } else { cell - 1 }
+                if neighbors == 3 { ALIVE } else { cell.saturating_sub(64) }
             };
         }
     }

@@ -4,12 +4,15 @@ mod metal_renderer;
 use metal::foreign_types::ForeignType;
 use metal::{CommandBufferRef, MetalLayerRef, MTLPixelFormat};
 use metal_renderer::MetalRenderer;
+use std::time::Instant;
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{EventLoop, ControlFlow};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::Window;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use core_graphics_types::geometry::CGSize;
+
+const TICK_RATES: &[u64] = &[1, 2, 5, 10, 20, 30, 60, 120];
 
 fn parse_seed_name() -> String {
     let args: Vec<String> = std::env::args().collect();
@@ -71,24 +74,44 @@ fn main() {
     let metal_layer = setup_metal_layer(&window, &renderer);
     sync_drawable_size(&window, metal_layer, &renderer);
 
+    let mut tick_index: usize = 3; // start at 10 steps/sec
+    let mut last_step = Instant::now();
+
     #[allow(deprecated)]
     let _ = event_loop.run(move |event, window_target| {
         match event {
             Event::WindowEvent { event, window_id } if window_id == window.id() => {
                 match event {
                     WindowEvent::CloseRequested => window_target.exit(),
-                    WindowEvent::KeyboardInput { event, .. } => {
-                        if event.logical_key == Key::Named(NamedKey::Escape)
-                            && event.state == ElementState::Pressed
-                        {
-                            window_target.exit();
+                    WindowEvent::KeyboardInput { event, .. }
+                        if event.state == ElementState::Pressed =>
+                    {
+                        match event.logical_key {
+                            Key::Named(NamedKey::Escape) => window_target.exit(),
+                            Key::Named(NamedKey::ArrowUp) => {
+                                if tick_index + 1 < TICK_RATES.len() {
+                                    tick_index += 1;
+                                }
+                                eprintln!("Speed: {} steps/sec", TICK_RATES[tick_index]);
+                            }
+                            Key::Named(NamedKey::ArrowDown) => {
+                                tick_index = tick_index.saturating_sub(1);
+                                eprintln!("Speed: {} steps/sec", TICK_RATES[tick_index]);
+                            }
+                            _ => {}
                         }
                     }
                     WindowEvent::Resized(_) => {
                         sync_drawable_size(&window, metal_layer, &renderer);
                     }
                     WindowEvent::RedrawRequested => {
-                        render_frame(&mut renderer, metal_layer);
+                        let tick_duration =
+                            std::time::Duration::from_micros(1_000_000 / TICK_RATES[tick_index]);
+                        let should_step = last_step.elapsed() >= tick_duration;
+                        render_frame(&mut renderer, metal_layer, should_step);
+                        if should_step {
+                            last_step = Instant::now();
+                        }
                     }
                     _ => {}
                 }
@@ -125,19 +148,26 @@ fn setup_metal_layer<'a>(window: &Window, renderer: &MetalRenderer) -> &'a Metal
     unsafe { &*(raw as *const MetalLayerRef) }
 }
 
-fn render_frame(renderer: &mut MetalRenderer, layer: &MetalLayerRef) {
+fn render_frame(renderer: &mut MetalRenderer, layer: &MetalLayerRef, step: bool) {
     let Some(drawable) = layer.next_drawable() else { return };
     let cmd_buffer = renderer.command_queue().new_command_buffer();
 
     let cur = renderer.current_buffer;
     let nxt = 1 - cur;
 
-    encode_compute_pass(cmd_buffer, renderer, cur, nxt);
-    encode_render_pass(cmd_buffer, renderer, drawable.texture(), nxt);
+    if step {
+        encode_compute_pass(cmd_buffer, renderer, cur, nxt);
+        encode_render_pass(cmd_buffer, renderer, drawable.texture(), nxt);
+    } else {
+        encode_render_pass(cmd_buffer, renderer, drawable.texture(), cur);
+    }
 
     cmd_buffer.present_drawable(drawable);
     cmd_buffer.commit();
-    renderer.current_buffer = nxt;
+
+    if step {
+        renderer.current_buffer = nxt;
+    }
 }
 
 fn encode_compute_pass(

@@ -132,7 +132,7 @@ fn test_death_underpopulation() {
     set_alive(&mut src, &[(5, 5), (4, 5)]);
     let mut dst = empty_grid();
     step(&src, &mut dst);
-    assert_eq!(dst[index(5, 5)], 254, "Alive cell with 1 neighbor should begin dying (254)");
+    assert_eq!(dst[index(5, 5)], 192, "Alive cell with 1 neighbor should begin dying (192)");
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn test_death_overpopulation() {
     set_alive(&mut src, &[(5, 5), (4, 5), (6, 5), (5, 4), (5, 6)]);
     let mut dst = empty_grid();
     step(&src, &mut dst);
-    assert_eq!(dst[index(5, 5)], 254, "Alive cell with 4 neighbors should begin dying (254)");
+    assert_eq!(dst[index(5, 5)], 192, "Alive cell with 4 neighbors should begin dying (192)");
 }
 
 // --- Fade decrement ---
@@ -153,7 +153,7 @@ fn test_fade_decrement() {
     src[index(5, 5)] = 100; // Dying cell, no alive neighbors nearby
     let mut dst = empty_grid();
     step(&src, &mut dst);
-    assert_eq!(dst[index(5, 5)], 99, "Dying cell should decrement by 1");
+    assert_eq!(dst[index(5, 5)], 36, "Dying cell should decrement by 64");
 }
 
 // --- Dying rebirth ---

@@ -41,13 +41,13 @@ kernel void update_cells(
     uint8_t result;
     if (cell == 255) {
         // Alive: survive with 2 or 3, otherwise begin dying
-        result = (neighbors == 2 || neighbors == 3) ? 255 : 254;
+        result = (neighbors == 2 || neighbors == 3) ? 255 : 192;
     } else if (cell == 0) {
         // Dead: birth with exactly 3
         result = (neighbors == 3) ? 255 : 0;
     } else {
-        // Dying (1–254): rebirth with 3, otherwise fade
-        result = (neighbors == 3) ? 255 : (cell - 1);
+        // Dying (1–254): rebirth with 3, otherwise fast fade
+        result = (neighbors == 3) ? 255 : uint8_t(max(int(cell) - 64, 0));
     }
 
     dst[idx] = result;
