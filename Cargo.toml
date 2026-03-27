@@ -1,0 +1,12 @@
+[package]
+name = "um-game-of-life"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+metal = "0.28"
+winit = "0.30"
+raw-window-metal = "1.1"
+objc = "0.2"
+core-graphics-types = "0.1"
+raw-window-handle = "0.6"

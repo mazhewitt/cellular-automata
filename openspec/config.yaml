@@ -1,0 +1,25 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Rust 2024 edition, metal-rs, winit, Metal Shading Language (MSL)
+  Platform: macOS / Apple Silicon only
+  Domain: Game of Life — learning project for Unified Memory Architecture (UMA)
+  
+  Architecture: Task split — CPU handles window/events/control, GPU handles
+  compute (cell updates) and rendering via Metal compute + render passes.
+  Double-buffered shared MTLBuffers (StorageModeShared) for zero-copy UMA access.
+  
+  Key files: ARCHITECTURE.md (design principles), RULES.md (coding & testing rules)
+  
+  GoL logic is pure Rust on &[u8] slices, separate from Metal. The same rules
+  exist in Rust (for testing) and in the Metal compute shader (for production).
+  GPU integration tests validate shader output matches CPU output.
+
+rules:
+  proposal:
+    - Reference ARCHITECTURE.md for design decisions
+    - Include a "UMA Relevance" section explaining what this teaches about unified memory
+  tasks:
+    - Each task should be independently testable where possible
+    - Include the test layer (pure logic / buffer / GPU integration / smoke) for each task
+    - Reference RULES.md for testing approach
