@@ -76,9 +76,13 @@ fn main() {
 
     let mut tick_index: usize = 3; // start at 10 steps/sec
     let mut last_step = Instant::now();
+    let mut redraw_pending = false;
 
     #[allow(deprecated)]
     let _ = event_loop.run(move |event, window_target| {
+        let tick_duration =
+            std::time::Duration::from_micros(1_000_000 / TICK_RATES[tick_index]);
+
         match event {
             Event::WindowEvent { event, window_id } if window_id == window.id() => {
                 match event {
@@ -105,21 +109,24 @@ fn main() {
                         sync_drawable_size(&window, metal_layer, &renderer);
                     }
                     WindowEvent::RedrawRequested => {
-                        let tick_duration =
-                            std::time::Duration::from_micros(1_000_000 / TICK_RATES[tick_index]);
-                        let should_step = last_step.elapsed() >= tick_duration;
-                        render_frame(&mut renderer, metal_layer, should_step);
-                        if should_step {
-                            last_step = Instant::now();
-                        }
+                        redraw_pending = false;
+                        render_frame(&mut renderer, metal_layer, true);
+                        last_step = Instant::now();
                     }
                     _ => {}
                 }
             }
-            Event::AboutToWait => window.request_redraw(),
+            Event::AboutToWait => {
+                if !redraw_pending && last_step.elapsed() >= tick_duration {
+                    redraw_pending = true;
+                    window.request_redraw();
+                }
+            }
             _ => {}
         }
-        window_target.set_control_flow(ControlFlow::Poll);
+        window_target.set_control_flow(
+            ControlFlow::WaitUntil(last_step + tick_duration),
+        );
     });
 }
 
