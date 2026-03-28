@@ -129,25 +129,26 @@ mod tests {
         (pipeline, library)
     }
 
-    fn run_gpu_step(
+    fn run_gpu_step_wh(
         device: &metal::Device,
         queue: &metal::CommandQueue,
         pipeline: &metal::ComputePipelineState,
         src_data: &[u8],
+        width: usize,
+        height: usize,
     ) -> Vec<u8> {
-        use um_game_of_life::grid::{GRID_WIDTH, GRID_HEIGHT, GRID_SIZE};
+        let grid_size = width * height;
 
         let src_buf = device.new_buffer_with_data(
             src_data.as_ptr() as *const _,
-            GRID_SIZE as u64,
+            grid_size as u64,
             MTLResourceOptions::StorageModeShared,
         );
         let dst_buf = device.new_buffer(
-            GRID_SIZE as u64,
+            grid_size as u64,
             MTLResourceOptions::StorageModeShared,
         );
 
-        // Uniforms buffer.
         #[repr(C)]
         struct Uniforms {
             grid_width: u32,
@@ -156,8 +157,8 @@ mod tests {
             cell_height: f32,
         }
         let uniforms = Uniforms {
-            grid_width: GRID_WIDTH as u32,
-            grid_height: GRID_HEIGHT as u32,
+            grid_width: width as u32,
+            grid_height: height as u32,
             cell_width: 1.0,
             cell_height: 1.0,
         };
@@ -175,16 +176,26 @@ mod tests {
         enc.set_buffer(2, Some(&uniform_buf), 0);
 
         let tg_size = metal::MTLSize::new(16, 16, 1);
-        let grid_size = metal::MTLSize::new(GRID_WIDTH as u64, GRID_HEIGHT as u64, 1);
-        enc.dispatch_threads(grid_size, tg_size);
+        let dispatch_size = metal::MTLSize::new(width as u64, height as u64, 1);
+        enc.dispatch_threads(dispatch_size, tg_size);
         enc.end_encoding();
         cmd.commit();
         cmd.wait_until_completed();
 
         unsafe {
             let ptr = dst_buf.contents() as *const u8;
-            std::slice::from_raw_parts(ptr, GRID_SIZE).to_vec()
+            std::slice::from_raw_parts(ptr, grid_size).to_vec()
         }
+    }
+
+    fn run_gpu_step(
+        device: &metal::Device,
+        queue: &metal::CommandQueue,
+        pipeline: &metal::ComputePipelineState,
+        src_data: &[u8],
+    ) -> Vec<u8> {
+        use um_game_of_life::grid::{GRID_WIDTH, GRID_HEIGHT};
+        run_gpu_step_wh(device, queue, pipeline, src_data, GRID_WIDTH, GRID_HEIGHT)
     }
 
     #[test]
@@ -274,6 +285,40 @@ mod tests {
         assert_eq!(
             cpu_dst, gpu_dst,
             "GPU output after spawned-glider CPU write must match CPU step byte-for-byte"
+        );
+    }
+
+    #[test]
+    fn test_gpu_non_square_grid_blinker_matches_cpu() {
+        // Validates runtime grid dimensions in the shader pipeline with a non-square grid.
+        use um_game_of_life::grid::{index_wh, step_wh};
+
+        let width: usize = 32;
+        let height: usize = 20;
+        let grid_size = width * height;
+
+        let device = Device::system_default().expect("Metal device not available");
+        let queue = device.new_command_queue();
+        let (pipeline, _lib) = create_compute_pipeline(&device);
+
+        // Seed a blinker in the centre of a 32×20 grid.
+        let mut src = vec![0u8; grid_size];
+        let cx = width / 2;
+        let cy = height / 2;
+        src[index_wh(cx - 1, cy, width)] = 255;
+        src[index_wh(cx, cy, width)] = 255;
+        src[index_wh(cx + 1, cy, width)] = 255;
+
+        // CPU step.
+        let mut cpu_dst = vec![0u8; grid_size];
+        step_wh(&src, &mut cpu_dst, width, height);
+
+        // GPU step.
+        let gpu_dst = run_gpu_step_wh(&device, &queue, &pipeline, &src, width, height);
+
+        assert_eq!(
+            cpu_dst, gpu_dst,
+            "GPU non-square grid blinker 1-step output must match CPU output byte-for-byte"
         );
     }
 }

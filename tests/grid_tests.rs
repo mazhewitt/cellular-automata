@@ -4,6 +4,10 @@ fn empty_grid() -> Vec<u8> {
     vec![0u8; GRID_SIZE]
 }
 
+fn empty_grid_wh(width: usize, height: usize) -> Vec<u8> {
+    vec![0u8; width * height]
+}
+
 fn set_alive(grid: &mut [u8], cells: &[(usize, usize)]) {
     for &(x, y) in cells {
         grid[index(x, y)] = ALIVE;
@@ -233,4 +237,59 @@ fn test_spawn_glider_each_rotation_evolves_correctly() {
         let final_cells = alive_cells(&buf_a);
         assert_eq!(final_cells.len(), 5, "Rotation {} should still have 5 alive cells after 4 steps", rotation);
     }
+}
+
+// --- Aspect-ratio grid sizing ---
+
+#[test]
+fn test_grid_config_for_screen_16_10() {
+    let gc = GridConfig::for_screen(2560.0, 1600.0);
+    assert_eq!(gc.height, 256);
+    assert_eq!(gc.width, 410); // round(256 * 2560/1600) = round(409.6) = 410
+}
+
+#[test]
+fn test_grid_config_for_screen_16_9() {
+    let gc = GridConfig::for_screen(2560.0, 1440.0);
+    assert_eq!(gc.height, 256);
+    assert_eq!(gc.width, 455); // round(256 * 2560/1440) = round(455.11) = 455
+}
+
+#[test]
+fn test_grid_config_for_screen_square() {
+    let gc = GridConfig::for_screen(1024.0, 1024.0);
+    assert_eq!(gc.height, 256);
+    assert_eq!(gc.width, 256);
+}
+
+#[test]
+fn test_grid_config_default_is_256x256() {
+    let gc = GridConfig::default();
+    assert_eq!(gc.width, 256);
+    assert_eq!(gc.height, 256);
+    assert_eq!(gc.size(), 256 * 256);
+}
+
+// --- Non-square grid step ---
+
+#[test]
+fn test_step_wh_blinker_on_wide_grid() {
+    let w = 32;
+    let h = 20;
+    let mut src = empty_grid_wh(w, h);
+    // Horizontal blinker at (16, 10)
+    src[index_wh(15, 10, w)] = ALIVE;
+    src[index_wh(16, 10, w)] = ALIVE;
+    src[index_wh(17, 10, w)] = ALIVE;
+
+    let mut dst = empty_grid_wh(w, h);
+    step_wh(&src, &mut dst, w, h);
+
+    // Should become vertical
+    assert_eq!(dst[index_wh(16, 9, w)], ALIVE);
+    assert_eq!(dst[index_wh(16, 10, w)], ALIVE);
+    assert_eq!(dst[index_wh(16, 11, w)], ALIVE);
+    // Horizontal cells should have started dying
+    assert_eq!(dst[index_wh(15, 10, w)], 192);
+    assert_eq!(dst[index_wh(17, 10, w)], 192);
 }

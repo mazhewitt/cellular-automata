@@ -5,7 +5,7 @@ use metal::{
     MTLResourceOptions, RenderPipelineState,
 };
 
-use crate::grid::{GRID_HEIGHT, GRID_SIZE, GRID_WIDTH};
+use crate::grid::GridConfig;
 
 /// Must match the Uniforms struct in game_of_life.metal.
 #[repr(C)]
@@ -25,6 +25,7 @@ pub struct MetalRenderer {
     pub grid_buffers: [Buffer; 2],
     pub uniform_buffer: Buffer,
     pub current_buffer: usize,
+    pub grid_config: GridConfig,
 }
 
 const SHADER_SOURCE: &str = include_str!("shaders/game_of_life.metal");
@@ -72,25 +73,25 @@ fn create_render_pipeline(
         .map_err(|e| format!("Render pipeline error: {}", e))
 }
 
-fn allocate_grid_buffers(device: &Device) -> [Buffer; 2] {
-    let buf_size = GRID_SIZE as u64;
+fn allocate_grid_buffers(device: &Device, grid_config: &GridConfig) -> [Buffer; 2] {
+    let buf_size = grid_config.size() as u64;
     let a = device.new_buffer(buf_size, MTLResourceOptions::StorageModeShared);
     let b = device.new_buffer(buf_size, MTLResourceOptions::StorageModeShared);
     unsafe {
-        std::ptr::write_bytes(a.contents() as *mut u8, 0, GRID_SIZE);
-        std::ptr::write_bytes(b.contents() as *mut u8, 0, GRID_SIZE);
+        std::ptr::write_bytes(a.contents() as *mut u8, 0, grid_config.size());
+        std::ptr::write_bytes(b.contents() as *mut u8, 0, grid_config.size());
     }
     [a, b]
 }
 
-fn allocate_uniform_buffer(device: &Device) -> Buffer {
+fn allocate_uniform_buffer(device: &Device, grid_config: &GridConfig) -> Buffer {
     let buffer = device.new_buffer(
         std::mem::size_of::<Uniforms>() as u64,
         MTLResourceOptions::StorageModeShared,
     );
     let initial = Uniforms {
-        grid_width: GRID_WIDTH as u32,
-        grid_height: GRID_HEIGHT as u32,
+        grid_width: grid_config.width as u32,
+        grid_height: grid_config.height as u32,
         cell_width: 1.0,
         cell_height: 1.0,
     };
@@ -101,7 +102,7 @@ fn allocate_uniform_buffer(device: &Device) -> Buffer {
 }
 
 impl MetalRenderer {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(grid_config: GridConfig) -> Result<Self, String> {
         let device = Device::system_default().ok_or_else(|| {
             "No Metal-capable GPU available. Metal is required on macOS/Apple Silicon.".to_string()
         })?;
@@ -109,8 +110,8 @@ impl MetalRenderer {
         let library = compile_shader_library(&device)?;
         let compute_pipeline = create_compute_pipeline(&device, &library)?;
         let render_pipeline = create_render_pipeline(&device, &library)?;
-        let grid_buffers = allocate_grid_buffers(&device);
-        let uniform_buffer = allocate_uniform_buffer(&device);
+        let grid_buffers = allocate_grid_buffers(&device, &grid_config);
+        let uniform_buffer = allocate_uniform_buffer(&device, &grid_config);
 
         Ok(MetalRenderer {
             device,
@@ -121,6 +122,7 @@ impl MetalRenderer {
             grid_buffers,
             uniform_buffer,
             current_buffer: 0,
+            grid_config,
         })
     }
 
@@ -135,10 +137,10 @@ impl MetalRenderer {
     /// Update the uniform buffer with new cell dimensions after resize.
     pub fn update_uniforms(&self, drawable_width: f64, drawable_height: f64) {
         let uniforms = Uniforms {
-            grid_width: GRID_WIDTH as u32,
-            grid_height: GRID_HEIGHT as u32,
-            cell_width: (drawable_width / GRID_WIDTH as f64) as f32,
-            cell_height: (drawable_height / GRID_HEIGHT as f64) as f32,
+            grid_width: self.grid_config.width as u32,
+            grid_height: self.grid_config.height as u32,
+            cell_width: (drawable_width / self.grid_config.width as f64) as f32,
+            cell_height: (drawable_height / self.grid_config.height as f64) as f32,
         };
         unsafe {
             let ptr = self.uniform_buffer.contents() as *mut Uniforms;
@@ -146,12 +148,12 @@ impl MetalRenderer {
         }
     }
 
-    /// Get a mutable slice view of grid buffer[0] for CPU seeding.
+    /// Get a mutable slice view of grid buffer[index] for CPU seeding.
     pub fn grid_buffer_slice_mut(&self, index: usize) -> &mut [u8] {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.grid_buffers[index].contents() as *mut u8,
-                GRID_SIZE,
+                self.grid_config.size(),
             )
         }
     }
