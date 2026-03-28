@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-A Game of Life implementation that explores Apple Silicon Unified Memory Architecture (UMA) by splitting work between CPU and GPU using Rust and `metal-rs`. Secondary goal: make it the smallest, most efficient GoL possible.
+A cellular automata playground that explores Apple Silicon Unified Memory Architecture (UMA) by splitting work between CPU and GPU using Rust and `metal-rs`. Supports two simulation modes: Game of Life and Physarum slime mould. Secondary goal: make it the smallest, most efficient implementation possible.
 
 ## Core Principle: Unified Memory is the Architecture
 
@@ -12,8 +12,9 @@ Every design decision flows from UMA. There are no buffer copies, no staging buf
             ┌──────────────────────┐
             │    Shared Memory      │
             │  ┌────────────────┐  │
-            │  │  Grid Buffers  │  │
-            │  │  (one copy)    │  │
+            │  │ Grid / Trail   │  │
+            │  │ Buffers        │  │
+            │  │ (one copy)     │  │
             │  └────┬─────┬────┘  │
             │       │     │       │
             └───────┼─────┼───────┘
@@ -26,22 +27,56 @@ Every design decision flows from UMA. There are no buffer copies, no staging buf
           └─────────┘   └──────────┘
 ```
 
+## Dual-Mode Architecture
+
+The binary supports two simulation modes selected via `--mode gol` (default) or `--mode physarum`:
+
+```
+  main()
+    ├──parse_args() → AppConfig { mode: SimMode, ... }
+    ├── SimMode::GameOfLife → run_gol()
+    └── SimMode::Physarum   → run_physarum()
+```
+
+Both modes share `MetalContext` (device + command queue + layer setup) and the `Uniforms` struct. Each mode has its own renderer, shader, and event loop.
+
+## File Layout
+
+| File | Purpose |
+|------|---------|
+| `src/main.rs` | CLI parsing, `SimMode` enum, GoL and Physarum event loops |
+| `src/grid.rs` | GoL grid logic and seed patterns (CPU reference) |
+| `src/physarum.rs` | Physarum CPU reference: config, agent step, diffuse/decay, agent init |
+| `src/metal_renderer.rs` | `MetalContext`, `MetalRenderer` (GoL), `PhysarumRenderer` |
+| `src/wallpaper.rs` | macOS desktop wallpaper mode |
+| `src/shaders/game_of_life.metal` | GoL compute + render shaders |
+| `src/shaders/physarum.metal` | Physarum compute (agent_step, diffuse_decay) + render shaders |
+| `tests/gpu_integration.rs` | GPU ↔ CPU cross-validation tests for both modes |
+
 ## Task Split Strategy
 
 | Role | CPU | GPU |
 |------|-----|-----|
 | Window & events | Yes | — |
 | Input handling | Yes | — |
-| Stats / FPS | Yes | — |
 | Sim control | Yes | — |
-| Cell update (GoL rules) | — | Compute shader |
-| Rendering | — | Render pass |
+| GoL cell update | — | Compute shader (`update_cells`) |
+| Physarum agent step | — | Compute shader (`agent_step`) |
+| Physarum diffuse/decay | — | Compute shader (`diffuse_decay`) |
+| Rendering (both modes) | — | Render pass (fullscreen quad + fragment shader) |
 
-The CPU sets up and submits work. The GPU executes compute and render. Both access shared buffers with zero copy.
+CPU reference implementations exist for both modes in pure Rust (`grid.rs`, `physarum.rs`) and are used by GPU integration tests for cross-validation.
 
 ## Double Buffering
 
-Two `MTLBuffer` objects allocated with `StorageModeShared`. The compute shader reads from one, writes to the other. After each frame, the roles swap (pointer swap, not memcpy).
+Both modes use double-buffered `StorageModeShared` buffers. After each frame the roles swap (pointer swap, not memcpy).
+
+### Game of Life
+Two grid buffers (`u8 × W×H`). Compute reads one, writes the other.
+
+### Physarum
+- **Agent buffer** (`float4 × N`): updated in-place each step (position, heading, species).
+- **Two trail buffers** (`float × W×H×3` — three species planes each). Agent step deposits into the current buffer in-place (atomic adds). Diffuse/decay reads current, writes to alternate. Then swap.
 
 ```
   Frame N                    Frame N+1
@@ -74,9 +109,12 @@ This teaches both compute and render pipelines and demonstrates the UMA advantag
 
 ## Phase Roadmap
 
-### Phase 1: Foundation (two changes)
+### Phase 1: Foundation (two changes) ✅
 - **Change 1** `metal-window-bootstrap`: winit window + Metal device + CAMetalLayer + clear-screen render pass
 - **Change 2** `gpu-game-of-life`: Compute shader (GoL + fade), render pipeline (quad + fragment), double-buffer, seed patterns, frame loop
+
+### Phase 1.5: Physarum Slime Mould ✅
+- **Change 3** `physarum-slime-mould`: Second simulation mode — multi-species Physarum agent model with GPU compute (agent step + diffuse/decay), CPU reference, shared Metal context, `--mode physarum` CLI
 
 ### Phase 2: User Interaction
 - Click to spawn cells

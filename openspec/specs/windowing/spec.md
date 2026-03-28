@@ -5,15 +5,21 @@ Define window lifecycle and event-loop behavior for the macOS bootstrap path.
 ## Requirements
 
 ### Requirement: Window creation
-The system SHALL create a macOS window of 1024x1024 logical pixels with the title "Game of Life — Unified Memory".
+The system SHALL create a macOS window whose initial configuration depends on the launch mode:
+- **Default (windowed):** 1024×1024 logical pixels with the title "Game of Life — Unified Memory"
+- **Wallpaper (`--wallpaper`):** Borderless fullscreen at `kCGDesktopWindowLevel`, sized to `[NSScreen mainScreen].frame`
 
-#### Scenario: Window appears on launch
-- **WHEN** the application starts
-- **THEN** a 1024x1024 window appears on screen with the correct title
+#### Scenario: Window appears on launch (windowed)
+- **WHEN** the application starts without `--wallpaper`
+- **THEN** a 1024×1024 window appears on screen with the correct title
 
-#### Scenario: Window is resizable
-- **WHEN** the window is created
+#### Scenario: Window is resizable (windowed)
+- **WHEN** the window is created in windowed mode
 - **THEN** the user can resize the window by dragging its edges
+
+#### Scenario: Window fills screen at desktop level (wallpaper)
+- **WHEN** the application starts with `--wallpaper`
+- **THEN** a borderless window fills the main screen at `kCGDesktopWindowLevel`, behind all other windows
 
 ### Requirement: Event loop
 The system SHALL run a `winit` event loop that processes window events each frame and drives the Metal render loop.

@@ -321,4 +321,133 @@ mod tests {
             "GPU non-square grid blinker 1-step output must match CPU output byte-for-byte"
         );
     }
+
+    // --- Physarum GPU integration tests ---
+
+    use um_game_of_life::metal_renderer::PhysarumRenderer;
+    use um_game_of_life::physarum::{PhysarumConfig, cpu_agent_step, cpu_diffuse_decay, init_agents};
+
+    const EPSILON: f32 = 1e-4;
+
+    fn assert_slices_close(a: &[f32], b: &[f32], label: &str) {
+        assert_eq!(a.len(), b.len(), "{}: length mismatch", label);
+        for (i, (&av, &bv)) in a.iter().zip(b.iter()).enumerate() {
+            assert!(
+                (av - bv).abs() < EPSILON,
+                "{}: mismatch at index {}: gpu={} cpu={}",
+                label, i, av, bv
+            );
+        }
+    }
+
+    fn assert_agents_close(a: &[[f32; 4]], b: &[[f32; 4]], label: &str) {
+        assert_eq!(a.len(), b.len(), "{}: agent count mismatch", label);
+        for (i, (ag, bg)) in a.iter().zip(b.iter()).enumerate() {
+            for c in 0..4 {
+                assert!(
+                    (ag[c] - bg[c]).abs() < EPSILON,
+                    "{}: agent {} component {} mismatch: gpu={} cpu={}",
+                    label, i, c, ag[c], bg[c]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_gpu_physarum_agent_step_matches_cpu() {
+        let width = 32u32;
+        let height = 32u32;
+        let num_agents = 100u32;
+
+        let mut renderer = PhysarumRenderer::new(width, height, num_agents)
+            .expect("PhysarumRenderer creation failed");
+
+        let agents = init_agents(width, height, num_agents as usize, 123);
+        renderer.upload_agents(&agents);
+
+        // Trail starts zeroed (blank). Run 1 compute step on GPU.
+        renderer.compute_step();
+
+        // Read back GPU results.
+        let gpu_agents = renderer.agent_buffer_slice_mut().to_vec();
+        let gpu_trail = renderer.trail_buffer_slice_mut(renderer.current_trail()).to_vec();
+
+        // CPU reference: same initial conditions.
+        let config = PhysarumConfig { width, height, ..PhysarumConfig::default() };
+
+        let mut cpu_agents = agents.clone();
+        let mut cpu_trail = vec![0.0f32; config.trail_len()];
+
+        // agent_step: deposits in-place into cpu_trail
+        cpu_agent_step(&mut cpu_agents, &mut cpu_trail, &config);
+
+        // diffuse_decay: reads cpu_trail (with deposits), writes to cpu_trail_dst
+        let mut cpu_trail_dst = vec![0.0f32; config.trail_len()];
+        cpu_diffuse_decay(&cpu_trail, &mut cpu_trail_dst, &config);
+
+        assert_agents_close(&gpu_agents, &cpu_agents, "agent_step");
+        assert_slices_close(&gpu_trail, &cpu_trail_dst, "trail after full step");
+    }
+
+    #[test]
+    fn test_gpu_physarum_diffuse_decay_matches_cpu() {
+        let width = 16u32;
+        let height = 16u32;
+
+        // Create renderer with 0 agents to test diffuse_decay alone.
+        let mut renderer = PhysarumRenderer::new(width, height, 0)
+            .expect("PhysarumRenderer creation failed");
+
+        // Seed trail with known pattern: single deposit in species 0.
+        let trail = renderer.trail_buffer_slice_mut(0);
+        trail[8 * 16 + 8] = 9.0; // centre of species 0 plane
+
+        // Run 1 compute step.
+        renderer.compute_step();
+
+        // Read back GPU result (current_trail is now 1 after swap).
+        let gpu_trail = renderer.trail_buffer_slice_mut(renderer.current_trail()).to_vec();
+
+        // CPU reference.
+        let config = PhysarumConfig { width, height, ..PhysarumConfig::default() };
+
+        let mut src_trail = vec![0.0f32; config.trail_len()];
+        src_trail[8 * 16 + 8] = 9.0;
+        let mut cpu_trail_dst = vec![0.0f32; config.trail_len()];
+        cpu_diffuse_decay(&src_trail, &mut cpu_trail_dst, &config);
+
+        assert_slices_close(&gpu_trail, &cpu_trail_dst, "diffuse_decay");
+    }
+
+    #[test]
+    fn test_gpu_physarum_full_frame_matches_cpu() {
+        let width = 32u32;
+        let height = 32u32;
+        let num_agents = 50u32;
+
+        let mut renderer = PhysarumRenderer::new(width, height, num_agents)
+            .expect("PhysarumRenderer creation failed");
+
+        let agents = init_agents(width, height, num_agents as usize, 999);
+        renderer.upload_agents(&agents);
+
+        // Run 1 full frame.
+        renderer.compute_step();
+
+        // Read back GPU results.
+        let gpu_agents = renderer.agent_buffer_slice_mut().to_vec();
+        let gpu_trail = renderer.trail_buffer_slice_mut(renderer.current_trail()).to_vec();
+
+        // CPU reference.
+        let config = PhysarumConfig { width, height, ..PhysarumConfig::default() };
+
+        let mut cpu_agents = agents.clone();
+        let mut cpu_trail = vec![0.0f32; config.trail_len()];
+        cpu_agent_step(&mut cpu_agents, &mut cpu_trail, &config);
+        let mut cpu_trail_dst = vec![0.0f32; config.trail_len()];
+        cpu_diffuse_decay(&cpu_trail, &mut cpu_trail_dst, &config);
+
+        assert_agents_close(&gpu_agents, &cpu_agents, "full frame agents");
+        assert_slices_close(&gpu_trail, &cpu_trail_dst, "full frame trail");
+    }
 }

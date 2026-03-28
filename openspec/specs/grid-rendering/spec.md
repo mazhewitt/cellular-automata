@@ -26,6 +26,18 @@ The system SHALL provide a fragment shader that reads cell values directly from 
 - **WHEN** the fragment shader reads a cell with value `0`
 - **THEN** the pixel is rendered as the background color (dark, near-black)
 
+#### Scenario: Physarum colored trail rendering
+- **WHEN** the Physarum fragment shader processes a pixel at grid cell `(gx, gy)`
+- **THEN** it reads trail intensities for all 3 species at that cell, multiplies each by its fixed palette color (species 0: cyan, species 1: magenta, species 2: gold), sums the results additively, and clamps to `[0, 1]`
+
+#### Scenario: Physarum black background
+- **WHEN** all species trail values at a pixel are `0.0`
+- **THEN** the pixel is black `(0, 0, 0, 1)`
+
+#### Scenario: Physarum color mixing at trail overlap
+- **WHEN** two or more species have non-zero trail values at the same pixel
+- **THEN** their palette contributions are additively blended, producing mixed hues (e.g., cyan + magenta → white/purple)
+
 ### Requirement: Grid-to-pixel mapping
 The system SHALL compute cell pixel size from the window dimensions and grid size, so the grid fills the window.
 
