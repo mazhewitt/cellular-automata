@@ -247,4 +247,33 @@ mod tests {
             "GPU glider 4-step output must match CPU output byte-for-byte"
         );
     }
+
+    #[test]
+    fn test_gpu_spawned_glider_one_step_matches_cpu() {
+        use um_game_of_life::grid::GRID_SIZE;
+
+        let device = Device::system_default().expect("Metal device not available");
+        let queue = device.new_command_queue();
+        let (pipeline, _lib) = create_compute_pipeline(&device);
+
+        // Spawn gliders with all 4 rotations via CPU write into a shared buffer.
+        let mut src = vec![0u8; GRID_SIZE];
+        um_game_of_life::grid::spawn_glider(&mut src, 64, 64, 0);
+        um_game_of_life::grid::spawn_glider(&mut src, 192, 64, 1);
+        um_game_of_life::grid::spawn_glider(&mut src, 64, 192, 2);
+        um_game_of_life::grid::spawn_glider(&mut src, 192, 192, 3);
+
+        // CPU step.
+        let mut cpu_dst = vec![0u8; GRID_SIZE];
+        um_game_of_life::grid::step(&src, &mut cpu_dst);
+
+        // GPU step — simulates the frame-boundary write pattern:
+        // CPU writes glider into shared buffer, then GPU reads it.
+        let gpu_dst = run_gpu_step(&device, &queue, &pipeline, &src);
+
+        assert_eq!(
+            cpu_dst, gpu_dst,
+            "GPU output after spawned-glider CPU write must match CPU step byte-for-byte"
+        );
+    }
 }

@@ -5,6 +5,7 @@ use metal::foreign_types::ForeignType;
 use metal::{CommandBufferRef, MetalLayerRef, MTLPixelFormat};
 use metal_renderer::MetalRenderer;
 use std::time::Instant;
+use rand::Rng;
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{EventLoop, ControlFlow};
 use winit::keyboard::{Key, NamedKey};
@@ -77,6 +78,9 @@ fn main() {
     let mut tick_index: usize = 3; // start at 10 steps/sec
     let mut last_step = Instant::now();
     let mut redraw_pending = false;
+    let mut rng = rand::thread_rng();
+    let mut next_spawn = Instant::now()
+        + std::time::Duration::from_secs(rng.gen_range(10..=30));
 
     #[allow(deprecated)]
     let _ = event_loop.run(move |event, window_target| {
@@ -110,6 +114,15 @@ fn main() {
                     }
                     WindowEvent::RedrawRequested => {
                         redraw_pending = false;
+                        if Instant::now() >= next_spawn {
+                            let cx = rng.gen_range(0..grid::GRID_WIDTH);
+                            let cy = rng.gen_range(0..grid::GRID_HEIGHT);
+                            let rotation = rng.gen_range(0..4);
+                            let buf = renderer.grid_buffer_slice_mut(renderer.current_buffer);
+                            grid::spawn_glider(buf, cx, cy, rotation);
+                            next_spawn = Instant::now()
+                                + std::time::Duration::from_secs(rng.gen_range(10..=30));
+                        }
                         render_frame(&mut renderer, metal_layer, true);
                         last_step = Instant::now();
                     }

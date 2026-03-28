@@ -178,3 +178,59 @@ fn test_empty_grid_stays_empty() {
     step(&src, &mut dst);
     assert!(dst.iter().all(|&v| v == 0), "Empty grid should remain empty");
 }
+
+// --- Glider rotation variants ---
+
+#[test]
+fn test_spawn_glider_all_rotations_produce_5_cells() {
+    for rotation in 0..4 {
+        let mut grid = empty_grid();
+        spawn_glider(&mut grid, 128, 128, rotation);
+        let cells = alive_cells(&grid);
+        assert_eq!(cells.len(), 5, "Rotation {} should place exactly 5 cells", rotation);
+    }
+}
+
+#[test]
+fn test_spawn_glider_rotations_are_distinct() {
+    let mut grids = Vec::new();
+    for rotation in 0..4 {
+        let mut grid = empty_grid();
+        spawn_glider(&mut grid, 128, 128, rotation);
+        grids.push(alive_cells(&grid));
+    }
+    for i in 0..4 {
+        for j in (i + 1)..4 {
+            assert_ne!(grids[i], grids[j], "Rotation {} and {} should produce different patterns", i, j);
+        }
+    }
+}
+
+#[test]
+fn test_spawn_glider_edge_wrapping() {
+    let mut grid = empty_grid();
+    spawn_glider(&mut grid, 255, 255, 0);
+    let cells = alive_cells(&grid);
+    assert_eq!(cells.len(), 5, "Glider at (255,255) should wrap and place exactly 5 cells");
+}
+
+#[test]
+fn test_spawn_glider_each_rotation_evolves_correctly() {
+    // Each rotated glider should still be a valid glider — after 4 steps,
+    // it should have 5 alive cells (same shape, shifted).
+    for rotation in 0..4 {
+        let mut grid = empty_grid();
+        spawn_glider(&mut grid, 128, 128, rotation);
+        let mut buf_a = grid;
+        let mut buf_b = empty_grid();
+        for i in 0..4 {
+            if i % 2 == 0 {
+                step(&buf_a, &mut buf_b);
+            } else {
+                step(&buf_b, &mut buf_a);
+            }
+        }
+        let final_cells = alive_cells(&buf_a);
+        assert_eq!(final_cells.len(), 5, "Rotation {} should still have 5 alive cells after 4 steps", rotation);
+    }
+}

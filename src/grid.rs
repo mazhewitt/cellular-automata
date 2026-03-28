@@ -70,3 +70,20 @@ pub fn seed_r_pentomino(grid: &mut [u8], cx: usize, cy: usize) {
     //  .X.
     place(grid, cx, cy, &[(0, -1), (1, -1), (-1, 0), (0, 0), (0, 1)]);
 }
+
+/// Four glider rotation offset tables (0°=SE, 90°=SW, 180°=NW, 270°=NE).
+const GLIDER_ROTATIONS: [[(isize, isize); 5]; 4] = [
+    // 0° (SE):  .X. / ..X / XXX
+    [(0, -1), (1, 0), (-1, 1), (0, 1), (1, 1)],
+    // 90° (SW): X.. / XXX / .X.  — rotate (x,y)→(-y,x)
+    [(1, 0), (0, 1), (-1, -1), (-1, 0), (-1, 1)],
+    // 180° (NW): XXX / X.. / .X. — rotate (x,y)→(-x,-y)
+    [(0, 1), (-1, 0), (1, -1), (0, -1), (-1, -1)],
+    // 270° (NE): .X. / XXX / ..X — rotate (x,y)→(y,-x)
+    [(-1, 0), (0, -1), (1, 1), (1, 0), (1, -1)],
+];
+
+/// Spawn a glider at (cx, cy) with the given rotation (0–3).
+pub fn spawn_glider(grid: &mut [u8], cx: usize, cy: usize, rotation: usize) {
+    place(grid, cx, cy, &GLIDER_ROTATIONS[rotation % 4]);
+}
