@@ -33,9 +33,9 @@ The binary supports two simulation modes selected via `--mode gol` (default) or 
 
 ```
   main()
-    ├──parse_args() → AppConfig { mode: SimMode, ... }
-    ├── SimMode::GameOfLife → run_gol()
-    └── SimMode::Physarum   → run_physarum()
+    ├── parse_args() → AppConfig { mode: SimMode, ... }
+    ├── SimMode::GameOfLife → gol_renderer::run()
+    └── SimMode::Physarum   → physarum_renderer::run()
 ```
 
 Both modes share `MetalContext` (device + command queue + layer setup) and the `Uniforms` struct. Each mode has its own renderer, shader, and event loop.
@@ -44,10 +44,13 @@ Both modes share `MetalContext` (device + command queue + layer setup) and the `
 
 | File | Purpose |
 |------|---------|
-| `src/main.rs` | CLI parsing, `SimMode` enum, GoL and Physarum event loops |
-| `src/grid.rs` | GoL grid logic and seed patterns (CPU reference) |
+| `src/main.rs` | CLI parsing, `SimMode` enum, window creation, mode dispatch (~100 lines) |
+| `src/app.rs` | Shared constants: `TICK_RATES`, `SIGTERM_RECEIVED` |
+| `src/game_of_life.rs` | GoL grid logic, seed patterns, `GridConfig` (CPU reference) |
 | `src/physarum.rs` | Physarum CPU reference: config, agent step, diffuse/decay, agent init |
-| `src/metal_renderer.rs` | `MetalContext`, `MetalRenderer` (GoL), `PhysarumRenderer` |
+| `src/metal_context.rs` | `MetalContext` (device, queue, layer setup), `Uniforms`, `allocate_uniform_buffer()` |
+| `src/gol_renderer.rs` | `GolRenderer` (GoL compute + render pipelines), `GoLState`, `run()` event loop |
+| `src/physarum_renderer.rs` | `PhysarumRenderer` (Physarum compute + render pipelines), `run()` event loop |
 | `src/wallpaper.rs` | macOS desktop wallpaper mode |
 | `src/shaders/game_of_life.metal` | GoL compute + render shaders |
 | `src/shaders/physarum.metal` | Physarum compute (agent_step, diffuse_decay) + render shaders |
@@ -65,7 +68,7 @@ Both modes share `MetalContext` (device + command queue + layer setup) and the `
 | Physarum diffuse/decay | — | Compute shader (`diffuse_decay`) |
 | Rendering (both modes) | — | Render pass (fullscreen quad + fragment shader) |
 
-CPU reference implementations exist for both modes in pure Rust (`grid.rs`, `physarum.rs`) and are used by GPU integration tests for cross-validation.
+CPU reference implementations exist for both modes in pure Rust (`game_of_life.rs`, `physarum.rs`) and are used by GPU integration tests for cross-validation.
 
 ## Double Buffering
 

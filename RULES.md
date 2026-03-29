@@ -8,11 +8,14 @@
 
 ```
 src/
-├── grid.rs                ← Pure Rust: GoL rules, indexing, seeding
-├── metal_renderer.rs      ← Metal: device, pipelines, command buffers
+├── game_of_life.rs        ← Pure Rust: GoL rules, indexing, seeding
+├── metal_context.rs       ← Metal: device, queue, layer setup, uniforms
+├── gol_renderer.rs        ← Metal: GoL compute + render pipelines, event loop
+├── physarum_renderer.rs   ← Metal: Physarum compute + render pipelines, event loop
 ├── shaders/
-│   └── game_of_life.metal ← MSL: compute + render shaders
-└── main.rs                ← App entry: window, event loop, wiring
+│   ├── game_of_life.metal ← MSL: GoL compute + render shaders
+│   └── physarum.metal     ← MSL: Physarum compute + render shaders
+└── main.rs                ← App entry: CLI parsing, window creation, mode dispatch
 ```
 
 ### Buffer Allocation
@@ -41,7 +44,7 @@ src/
 - Metal Shading Language (MSL) files live in `src/shaders/`
 - Compiled at build time or loaded as source at runtime via `device.new_library_with_source()`
 - Compute shader threadgroup size: start with `(16, 16, 1)` — 256 threads, good default for 2D grids
-- The compute shader and Rust `grid.rs` must implement identical GoL rules — they are validated against each other in tests
+- The compute shader and Rust `game_of_life.rs` must implement identical GoL rules — they are validated against each other in tests
 
 ### Frame Loop Structure
 

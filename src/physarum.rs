@@ -78,6 +78,10 @@ pub fn cpu_agent_step(
     let h = config.height as f32;
     let plane = config.plane_size();
 
+    // Two-pass to match GPU parallel execution: all agents sense from the
+    // original trail before any deposits land.
+
+    // Pass 1: sense + move (read-only access to trail).
     for agent in agents.iter_mut() {
         let x = agent[0];
         let y = agent[1];
@@ -128,8 +132,14 @@ pub fn cpu_agent_step(
         agent[0] = nx;
         agent[1] = ny;
         agent[2] = new_heading;
+    }
 
-        // --- Deposit (in-place into trail) ---
+    // Pass 2: deposit (write to trail after all agents have moved).
+    for agent in agents.iter() {
+        let nx = agent[0];
+        let ny = agent[1];
+        let species = agent[3] as usize;
+
         let cx = nx as u32;
         let cy = ny as u32;
         let deposit_idx = species * plane + (cy as usize) * (config.width as usize) + (cx as usize);

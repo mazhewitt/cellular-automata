@@ -8,7 +8,7 @@ use metal::foreign_types::ForeignType;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
-use crate::grid::GridConfig;
+use crate::game_of_life::GridConfig;
 
 /// Must match the Uniforms struct in game_of_life.metal and physarum.metal.
 #[repr(C)]

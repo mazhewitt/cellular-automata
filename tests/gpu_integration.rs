@@ -194,27 +194,25 @@ mod tests {
         pipeline: &metal::ComputePipelineState,
         src_data: &[u8],
     ) -> Vec<u8> {
-        use um_game_of_life::grid::{GRID_WIDTH, GRID_HEIGHT};
-        run_gpu_step_wh(device, queue, pipeline, src_data, GRID_WIDTH, GRID_HEIGHT)
+        run_gpu_step_wh(device, queue, pipeline, src_data, 256, 256)
     }
 
     #[test]
     fn test_gpu_blinker_one_step_matches_cpu() {
-        use um_game_of_life::grid::{GRID_WIDTH, GRID_HEIGHT, GRID_SIZE};
-
         let device = Device::system_default().expect("Metal device not available");
         let queue = device.new_command_queue();
         let (pipeline, _lib) = create_compute_pipeline(&device);
 
+        let grid_size: usize = 256 * 256;
         // Seed blinker.
-        let mut src = vec![0u8; GRID_SIZE];
-        let cx = GRID_WIDTH / 2;
-        let cy = GRID_HEIGHT / 2;
-        um_game_of_life::grid::seed_blinker(&mut src, cx, cy);
+        let mut src = vec![0u8; grid_size];
+        let cx = 128;
+        let cy = 128;
+        um_game_of_life::game_of_life::seed_blinker(&mut src, cx, cy, 256, 256);
 
         // CPU step.
-        let mut cpu_dst = vec![0u8; GRID_SIZE];
-        um_game_of_life::grid::step(&src, &mut cpu_dst);
+        let mut cpu_dst = vec![0u8; grid_size];
+        um_game_of_life::game_of_life::step(&src, &mut cpu_dst, 256, 256);
 
         // GPU step.
         let gpu_dst = run_gpu_step(&device, &queue, &pipeline, &src);
@@ -227,23 +225,22 @@ mod tests {
 
     #[test]
     fn test_gpu_glider_four_steps_matches_cpu() {
-        use um_game_of_life::grid::{GRID_WIDTH, GRID_HEIGHT, GRID_SIZE};
-
         let device = Device::system_default().expect("Metal device not available");
         let queue = device.new_command_queue();
         let (pipeline, _lib) = create_compute_pipeline(&device);
 
+        let grid_size: usize = 256 * 256;
         // Seed glider.
-        let mut state = vec![0u8; GRID_SIZE];
-        let cx = GRID_WIDTH / 2;
-        let cy = GRID_HEIGHT / 2;
-        um_game_of_life::grid::seed_glider(&mut state, cx, cy);
+        let mut state = vec![0u8; grid_size];
+        let cx = 128;
+        let cy = 128;
+        um_game_of_life::game_of_life::seed_glider(&mut state, cx, cy, 256, 256);
 
         // Run 4 steps on both CPU and GPU.
         let mut cpu_state = state.clone();
-        let mut cpu_tmp = vec![0u8; GRID_SIZE];
+        let mut cpu_tmp = vec![0u8; grid_size];
         for _ in 0..4 {
-            um_game_of_life::grid::step(&cpu_state, &mut cpu_tmp);
+            um_game_of_life::game_of_life::step(&cpu_state, &mut cpu_tmp, 256, 256);
             std::mem::swap(&mut cpu_state, &mut cpu_tmp);
         }
 
@@ -261,22 +258,21 @@ mod tests {
 
     #[test]
     fn test_gpu_spawned_glider_one_step_matches_cpu() {
-        use um_game_of_life::grid::GRID_SIZE;
-
         let device = Device::system_default().expect("Metal device not available");
         let queue = device.new_command_queue();
         let (pipeline, _lib) = create_compute_pipeline(&device);
 
+        let grid_size: usize = 256 * 256;
         // Spawn gliders with all 4 rotations via CPU write into a shared buffer.
-        let mut src = vec![0u8; GRID_SIZE];
-        um_game_of_life::grid::spawn_glider(&mut src, 64, 64, 0);
-        um_game_of_life::grid::spawn_glider(&mut src, 192, 64, 1);
-        um_game_of_life::grid::spawn_glider(&mut src, 64, 192, 2);
-        um_game_of_life::grid::spawn_glider(&mut src, 192, 192, 3);
+        let mut src = vec![0u8; grid_size];
+        um_game_of_life::game_of_life::spawn_glider(&mut src, 64, 64, 0, 256, 256);
+        um_game_of_life::game_of_life::spawn_glider(&mut src, 192, 64, 1, 256, 256);
+        um_game_of_life::game_of_life::spawn_glider(&mut src, 64, 192, 2, 256, 256);
+        um_game_of_life::game_of_life::spawn_glider(&mut src, 192, 192, 3, 256, 256);
 
         // CPU step.
-        let mut cpu_dst = vec![0u8; GRID_SIZE];
-        um_game_of_life::grid::step(&src, &mut cpu_dst);
+        let mut cpu_dst = vec![0u8; grid_size];
+        um_game_of_life::game_of_life::step(&src, &mut cpu_dst, 256, 256);
 
         // GPU step — simulates the frame-boundary write pattern:
         // CPU writes glider into shared buffer, then GPU reads it.
@@ -291,7 +287,7 @@ mod tests {
     #[test]
     fn test_gpu_non_square_grid_blinker_matches_cpu() {
         // Validates runtime grid dimensions in the shader pipeline with a non-square grid.
-        use um_game_of_life::grid::{index_wh, step_wh};
+        use um_game_of_life::game_of_life::{index, step};
 
         let width: usize = 32;
         let height: usize = 20;
@@ -305,13 +301,13 @@ mod tests {
         let mut src = vec![0u8; grid_size];
         let cx = width / 2;
         let cy = height / 2;
-        src[index_wh(cx - 1, cy, width)] = 255;
-        src[index_wh(cx, cy, width)] = 255;
-        src[index_wh(cx + 1, cy, width)] = 255;
+        src[index(cx - 1, cy, width)] = 255;
+        src[index(cx, cy, width)] = 255;
+        src[index(cx + 1, cy, width)] = 255;
 
         // CPU step.
         let mut cpu_dst = vec![0u8; grid_size];
-        step_wh(&src, &mut cpu_dst, width, height);
+        step(&src, &mut cpu_dst, width, height);
 
         // GPU step.
         let gpu_dst = run_gpu_step_wh(&device, &queue, &pipeline, &src, width, height);
@@ -324,10 +320,12 @@ mod tests {
 
     // --- Physarum GPU integration tests ---
 
-    use um_game_of_life::metal_renderer::PhysarumRenderer;
+    use um_game_of_life::physarum_renderer::PhysarumRenderer;
     use um_game_of_life::physarum::{PhysarumConfig, cpu_agent_step, cpu_diffuse_decay, init_agents};
 
     const EPSILON: f32 = 1e-4;
+    // Agent positions accumulate trig (sin/cos) differences between Metal fast-math and Rust libm.
+    const AGENT_EPSILON: f32 = 5e-3;
 
     fn assert_slices_close(a: &[f32], b: &[f32], label: &str) {
         assert_eq!(a.len(), b.len(), "{}: length mismatch", label);
@@ -345,7 +343,7 @@ mod tests {
         for (i, (ag, bg)) in a.iter().zip(b.iter()).enumerate() {
             for c in 0..4 {
                 assert!(
-                    (ag[c] - bg[c]).abs() < EPSILON,
+                    (ag[c] - bg[c]).abs() < AGENT_EPSILON,
                     "{}: agent {} component {} mismatch: gpu={} cpu={}",
                     label, i, c, ag[c], bg[c]
                 );
