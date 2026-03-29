@@ -4,9 +4,9 @@ use metal::{
     Buffer, ComputePipelineState, Device, Library,
     MetalLayerRef, MTLResourceOptions, RenderPipelineState,
 };
+use rand::RngExt;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use rand::Rng;
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{EventLoop, ControlFlow};
 use winit::keyboard::{Key, NamedKey};
@@ -226,9 +226,9 @@ struct GoLState {
 
 impl GoLState {
     fn new() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let next_spawn = Instant::now()
-            + std::time::Duration::from_secs(rng.gen_range(10..=30));
+            + std::time::Duration::from_secs(rng.random_range(10..=30));
         GoLState { rng, next_spawn }
     }
 
@@ -247,13 +247,13 @@ impl GoLState {
     fn maybe_spawn_glider(&mut self, renderer: &GolRenderer) {
         if Instant::now() >= self.next_spawn {
             let gc = renderer.grid_config();
-            let cx = self.rng.gen_range(0..gc.width);
-            let cy = self.rng.gen_range(0..gc.height);
-            let rotation = self.rng.gen_range(0..4);
+            let cx = self.rng.random_range(0..gc.width);
+            let cy = self.rng.random_range(0..gc.height);
+            let rotation = self.rng.random_range(0..4);
             let buf = renderer.grid_buffer_slice_mut(renderer.current_buffer());
             game_of_life::spawn_glider(buf, cx, cy, rotation, gc.width, gc.height);
             self.next_spawn = Instant::now()
-                + std::time::Duration::from_secs(self.rng.gen_range(10..=30));
+                + std::time::Duration::from_secs(self.rng.random_range(10..=30));
         }
     }
 }

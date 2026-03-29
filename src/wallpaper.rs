@@ -40,13 +40,11 @@ pub fn configure_wallpaper(window: &Window) {
     ns_window.setStyleMask(NSWindowStyleMask::Borderless);
 
     // Appear on all Spaces, stay stationary, invisible to Exposé/Cmd-Tab.
-    unsafe {
-        ns_window.setCollectionBehavior(
-            NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::Stationary
-                | NSWindowCollectionBehavior::IgnoresCycle,
-        );
-    }
+    ns_window.setCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::Stationary
+            | NSWindowCollectionBehavior::IgnoresCycle,
+    );
 
     // No shadow for a wallpaper.
     ns_window.setHasShadow(false);

@@ -183,8 +183,8 @@ pub fn cpu_diffuse_decay(
 /// Uses a deterministic seed for reproducibility in tests.
 pub fn init_agents(width: u32, height: u32, num_agents: usize, seed: u64) -> Vec<[f32; 4]> {
     use rand::rngs::StdRng;
+    use rand::RngExt;
     use rand::SeedableRng;
-    use rand::Rng;
 
     let mut rng = StdRng::seed_from_u64(seed);
     let w = width as f32;
@@ -193,9 +193,9 @@ pub fn init_agents(width: u32, height: u32, num_agents: usize, seed: u64) -> Vec
 
     (0..num_agents)
         .map(|i| {
-            let x: f32 = rng.r#gen();
-            let y: f32 = rng.r#gen();
-            let heading: f32 = rng.r#gen();
+            let x: f32 = rng.random();
+            let y: f32 = rng.random();
+            let heading: f32 = rng.random();
             let species = (i % num_species as usize) as f32;
             [x * w, y * h, heading * 2.0 * PI, species]
         })
