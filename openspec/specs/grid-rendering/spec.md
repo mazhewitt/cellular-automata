@@ -1,29 +1,22 @@
 # Purpose
 
-Define visual rendering of the cell grid via full-screen quad, fragment shader color mapping, and uniform buffer management.
+Define visual rendering of cell and trail values, plus shared render uniforms.
 
 ## Requirements
 
-### Requirement: Full-screen quad rendering
-The system SHALL render a full-screen quad each frame using a vertex shader that generates vertices from `vertex_id` with no vertex buffer.
-
-#### Scenario: Quad covers entire drawable
-- **WHEN** the render pass executes
-- **THEN** a quad covering the full drawable area is drawn using 6 vertices (two triangles) generated entirely in the vertex shader
-
 ### Requirement: Fragment shader reads grid buffer
-The system SHALL provide a fragment shader that reads cell values directly from the grid buffer (zero-copy UMA access) and maps them to colors.
+The system SHALL provide per-mode fragment shaders that read cell/trail values directly from mode-specific buffers (zero-copy UMA access) and map them to colors.
 
-#### Scenario: Alive cell is bright
-- **WHEN** the fragment shader reads a cell with value `255`
+#### Scenario: GoL alive cell is bright
+- **WHEN** the GoL fragment shader reads a cell with value `255`
 - **THEN** the pixel is rendered in a bright color (e.g., white or bright green)
 
-#### Scenario: Dying cell fades
-- **WHEN** the fragment shader reads a cell with value `v` where `1 ≤ v ≤ 254`
+#### Scenario: GoL dying cell fades
+- **WHEN** the GoL fragment shader reads a cell with value `v` where `1 ≤ v ≤ 254`
 - **THEN** the pixel brightness is proportional to `v / 255.0` — higher values are brighter, lower values are dimmer
 
-#### Scenario: Dead cell is dark
-- **WHEN** the fragment shader reads a cell with value `0`
+#### Scenario: GoL dead cell is dark
+- **WHEN** the GoL fragment shader reads a cell with value `0`
 - **THEN** the pixel is rendered as the background color (dark, near-black)
 
 #### Scenario: Physarum colored trail rendering
@@ -38,19 +31,8 @@ The system SHALL provide a fragment shader that reads cell values directly from 
 - **WHEN** two or more species have non-zero trail values at the same pixel
 - **THEN** their palette contributions are additively blended, producing mixed hues (e.g., cyan + magenta → white/purple)
 
-### Requirement: Grid-to-pixel mapping
-The system SHALL compute cell pixel size from the window dimensions and grid size, so the grid fills the window.
-
-#### Scenario: Cell size calculation
-- **WHEN** the window drawable is `W×H` pixels and the grid is `GW×GH` cells
-- **THEN** each cell occupies `floor(W / GW)` by `floor(H / GH)` pixels
-
-#### Scenario: Fragment maps pixel to cell
-- **WHEN** the fragment shader processes a pixel at position `(px, py)`
-- **THEN** it reads the cell at grid index `(floor(px / cell_width), floor(py / cell_height))`
-
 ### Requirement: Uniform buffer for render parameters
-The system SHALL provide a `StorageModeShared` uniform buffer containing grid width, grid height, and cell pixel size, updated on window resize.
+The system SHALL provide a `StorageModeShared` uniform buffer containing grid width, grid height, and cell pixel size, updated on window resize. The uniform buffer SHALL be allocated via `MetalContext` and shared by both renderers.
 
 #### Scenario: Uniforms are set before first frame
 - **WHEN** the application initializes

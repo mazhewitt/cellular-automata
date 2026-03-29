@@ -1,42 +1,31 @@
 # Purpose
 
-Define selection between Game of Life and Physarum modes and how startup behavior branches by mode.
+Define how startup behavior branches by mode and where each mode's event loop lives.
 
 ## Requirements
 
-### Requirement: Mode CLI flag
-The system SHALL accept a `--mode` command-line argument with values `gol` (default) or `physarum` to select the active simulation.
+### Requirement: Mode-specific event loop ownership
+The system SHALL provide a per-mode `run()` function in each renderer module (`gol_renderer::run()`, `physarum_renderer::run()`) that owns the winit event loop for that mode. `main.rs` SHALL dispatch to the correct `run()` based on the selected `SimMode`.
 
-#### Scenario: Default mode is Game of Life
-- **WHEN** the application starts without `--mode`
-- **THEN** the Game of Life simulation runs with existing behaviour
-
-#### Scenario: Physarum mode selected
-- **WHEN** the application starts with `--mode physarum`
-- **THEN** the Physarum slime mould simulation runs
-
-#### Scenario: Invalid mode rejected
-- **WHEN** the application starts with `--mode unknown`
-- **THEN** the application exits with an error message listing valid modes
-
-### Requirement: Pipeline branching at startup
-The system SHALL create only the Metal pipelines and buffers required by the selected mode. GoL buffers and pipelines are not allocated when running in Physarum mode, and vice versa.
-
-#### Scenario: GoL mode allocates GoL resources only
+#### Scenario: GoL mode dispatches to gol_renderer::run
 - **WHEN** the application starts in `gol` mode
-- **THEN** only the GoL compute pipeline, render pipeline, and `u8` grid buffers are allocated
+- **THEN** `main.rs` calls `gol_renderer::run(config, window, event_loop)` and the GoL event loop handles all windowing, input, and rendering
 
-#### Scenario: Physarum mode allocates Physarum resources only
+#### Scenario: Physarum mode dispatches to physarum_renderer::run
 - **WHEN** the application starts in `physarum` mode
-- **THEN** only the Physarum compute pipelines (agent_step, diffuse_decay), render pipeline, agent buffer, and float trail map buffers are allocated
+- **THEN** `main.rs` calls `physarum_renderer::run(config, window, event_loop)` and the Physarum event loop handles all windowing, input, and rendering
 
-### Requirement: Mode-agnostic event loop
-The system SHALL run the same winit event loop regardless of mode, dispatching to mode-specific step and render functions.
+#### Scenario: main.rs contains no event loop
+- **WHEN** inspecting `main.rs`
+- **THEN** it contains only CLI parsing (`parse_args`), window/event-loop creation, and a `match` dispatch — no `Event::WindowEvent` handling or `event_loop.run()` calls
 
-#### Scenario: Tick rate applies to both modes
-- **WHEN** the user presses arrow keys to change tick rate
-- **THEN** the simulation speed changes for whichever mode is active
+### Requirement: Tick rate applies to both modes
+The system SHALL share tick-rate constants (`TICK_RATES`) and SIGTERM handling (`SIGTERM_RECEIVED`, `sigterm_handler`) from `main.rs`, used by both renderer `run()` functions.
 
-#### Scenario: Wallpaper mode works with both simulations
-- **WHEN** `--wallpaper` is combined with `--mode physarum`
-- **THEN** Physarum renders as a desktop wallpaper with the same window configuration as GoL wallpaper mode
+#### Scenario: Arrow keys change tick rate in GoL
+- **WHEN** the user presses arrow keys in GoL mode
+- **THEN** the GoL event loop adjusts the tick rate using the shared `TICK_RATES` array
+
+#### Scenario: Arrow keys change tick rate in Physarum
+- **WHEN** the user presses arrow keys in Physarum mode
+- **THEN** the Physarum event loop adjusts the tick rate using the shared `TICK_RATES` array

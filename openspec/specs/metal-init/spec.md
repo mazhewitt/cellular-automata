@@ -1,95 +1,64 @@
 # Purpose
 
-Define Metal initialization, pipeline setup, buffer allocation, and frame clear behavior for the macOS path.
+Define Metal initialization and renderer-local pipeline setup for the macOS path.
 
 ## Requirements
 
 ### Requirement: Metal device initialization
-The system SHALL obtain the default Metal device (`MTLDevice`) at startup and fail with a descriptive error if no Metal-capable GPU is available.
+The system SHALL obtain the default Metal device (`MTLDevice`) at startup via `MetalContext::new()` and fail with a descriptive error if no Metal-capable GPU is available. `MetalContext` SHALL be defined in a dedicated `metal_context` module.
 
 #### Scenario: Successful device creation on Apple Silicon
 - **WHEN** the application starts on a macOS system with Apple Silicon
-- **THEN** the system obtains a valid `MTLDevice` instance from `MTLCreateSystemDefaultDevice`
+- **THEN** `MetalContext::new()` returns a valid context holding a `MTLDevice` instance
 
 #### Scenario: No Metal device available
 - **WHEN** the application starts on a system without Metal support
-- **THEN** the system exits with an error message indicating Metal is required
-
-### Requirement: Command queue creation
-The system SHALL create a `MTLCommandQueue` from the Metal device at startup.
-
-#### Scenario: Command queue is operational
-- **WHEN** the Metal device has been initialized
-- **THEN** the system creates a `MTLCommandQueue` capable of submitting command buffers
-
-### Requirement: Shared-mode buffer allocation
-The system SHALL allocate `MTLBuffer` objects using `StorageModeShared` so that CPU and GPU access the same physical memory with no copies. The CPU MAY write to the source grid buffer at frame boundaries during the event loop, not only at startup.
-
-#### Scenario: Buffer is writable from CPU
-- **WHEN** a `StorageModeShared` buffer is allocated
-- **THEN** the CPU can write data to the buffer via `contents()` pointer
-
-#### Scenario: Buffer data persists for GPU access
-- **WHEN** the CPU writes data to a shared buffer
-- **THEN** the same data is accessible by the GPU without any explicit transfer or synchronization call
-
-#### Scenario: Buffer is readable from CPU after GPU write
-- **WHEN** the GPU writes data to a shared buffer and the command buffer completes
-- **THEN** the CPU can read the GPU-written data directly from the same buffer via `contents()` pointer
-
-#### Scenario: CPU writes at frame boundaries are safe
-- **WHEN** the CPU writes glider cells into the source grid buffer after the previous frame's commit and before the next command buffer creation
-- **THEN** the GPU reads the updated data on the next compute dispatch without corruption
+- **THEN** `MetalContext::new()` returns an error indicating Metal is required
 
 ### Requirement: CAMetalLayer attachment
-The system SHALL create a `CAMetalLayer`, configure it with the Metal device and `BGRA8Unorm` pixel format, and attach it to the window's `NSView`. The layer's `framebufferOnly` property SHALL be set to `true`.
+The system SHALL provide `MetalContext::setup_metal_layer()` as the single entry point for creating and configuring a `CAMetalLayer`. Per-mode renderer wrappers for layer setup SHALL NOT exist.
 
 #### Scenario: Layer is configured correctly
 - **WHEN** the Metal device and window are initialized
-- **THEN** a `CAMetalLayer` is created with the device set, pixel format set to `BGRA8Unorm`, and framebuffer-only set to true
+- **THEN** `MetalContext::setup_metal_layer()` creates a `CAMetalLayer` with the device set, pixel format set to `BGRA8Unorm`, and framebuffer-only set to true
 
-#### Scenario: Layer drawable size matches window physical size
-- **WHEN** the `CAMetalLayer` is attached to the window
-- **THEN** the layer's `drawableSize` is set to the window's physical pixel dimensions
-
-### Requirement: Clear-color render pass
-The system SHALL encode a render pass each frame that clears the drawable to a solid background color.
-
-#### Scenario: Frame renders solid color
-- **WHEN** a new frame begins and a drawable is acquired from the layer
-- **THEN** a command buffer is created, a render pass clears the drawable to a dark background color, the drawable is presented, and the command buffer is committed
+#### Scenario: No duplicate layer setup methods
+- **WHEN** `GolRenderer` or `PhysarumRenderer` needs a Metal layer
+- **THEN** the caller uses `MetalContext::setup_metal_layer()` directly; neither renderer exposes its own `setup_metal_layer()` method
 
 ### Requirement: Compute pipeline state
-The system SHALL create a `MTLComputePipelineState` from the `update_cells` kernel function in the compiled Metal shader library.
+The system SHALL create mode-specific `MTLComputePipelineState` objects within each renderer's module. GoL pipelines SHALL be created in `gol_renderer`, Physarum pipelines in `physarum_renderer`. Shader compilation helper functions SHALL be module-private.
 
-#### Scenario: Compute pipeline creation succeeds
-- **WHEN** the Metal device and shader library are initialized
+#### Scenario: GoL compute pipeline creation succeeds
+- **WHEN** `GolRenderer::new()` is called with a valid `MetalContext`
 - **THEN** a `MTLComputePipelineState` is created from the `update_cells` function without error
 
+#### Scenario: Physarum compute pipelines creation succeeds
+- **WHEN** `PhysarumRenderer::new()` is called with a valid `MetalContext`
+- **THEN** `MTLComputePipelineState` objects are created from `agent_step` and `diffuse_decay` functions without error
+
+#### Scenario: Shader compilation is private
+- **WHEN** shader library compilation functions exist in `gol_renderer` and `physarum_renderer`
+- **THEN** they are module-private (`fn`, not `pub fn`) and not accessible from outside their module
+
 ### Requirement: Render pipeline state
-The system SHALL create a `MTLRenderPipelineState` configured with the `fullscreen_quad_vertex` vertex function and `grid_fragment` fragment function, with pixel format `BGRA8Unorm`.
+The system SHALL create mode-specific `MTLRenderPipelineState` objects within each renderer's module. `GolRenderer` uses `fullscreen_quad_vertex` + `grid_fragment`. `PhysarumRenderer` uses `fullscreen_quad_vertex` + `physarum_fragment`.
 
-#### Scenario: Render pipeline creation succeeds
-- **WHEN** the Metal device and shader library are initialized
-- **THEN** a `MTLRenderPipelineState` is created with the vertex and fragment functions and correct pixel format
+#### Scenario: GoL render pipeline creation succeeds
+- **WHEN** `GolRenderer::new()` is called
+- **THEN** a `MTLRenderPipelineState` is created with GoL vertex and fragment functions
 
-### Requirement: Double-buffer allocation
-The system SHALL allocate exactly two `MTLBuffer` objects of size `256 * 256` bytes using `StorageModeShared` for the grid double-buffer.
-
-#### Scenario: Two grid buffers allocated
-- **WHEN** the Metal renderer initializes
-- **THEN** two `StorageModeShared` buffers of 65,536 bytes each are allocated
-
-### Requirement: Uniform buffer allocation
-The system SHALL allocate one `MTLBuffer` using `StorageModeShared` for render uniforms (grid width, grid height, cell pixel size).
-
-#### Scenario: Uniform buffer allocated
-- **WHEN** the Metal renderer initializes
-- **THEN** one `StorageModeShared` uniform buffer is allocated with capacity for render parameters
+#### Scenario: Physarum render pipeline creation succeeds
+- **WHEN** `PhysarumRenderer::new()` is called
+- **THEN** a `MTLRenderPipelineState` is created with Physarum vertex and fragment functions
 
 ### Requirement: Shader library loading
-The system SHALL load the Metal shader source from `src/shaders/game_of_life.metal` at runtime using `device.new_library_with_source()`.
+The system SHALL load Metal shader sources at runtime via `device.new_library_with_source()`. Each renderer module SHALL load only its own shader source. The GoL shader source is `src/shaders/game_of_life.metal`. The Physarum shader source is `src/shaders/physarum.metal`.
 
-#### Scenario: Library compiles successfully
-- **WHEN** the shader source is loaded
-- **THEN** the Metal library compiles without errors and contains the `update_cells`, `fullscreen_quad_vertex`, and `grid_fragment` functions
+#### Scenario: GoL library compiles successfully
+- **WHEN** `GolRenderer::new()` loads the shader source
+- **THEN** the Metal library compiles and contains `update_cells`, `fullscreen_quad_vertex`, and `grid_fragment`
+
+#### Scenario: Physarum library compiles successfully
+- **WHEN** `PhysarumRenderer::new()` loads the shader source
+- **THEN** the Metal library compiles and contains `agent_step`, `diffuse_decay`, `fullscreen_quad_vertex`, and `physarum_fragment`
